@@ -1,0 +1,199 @@
+\section{Algorithm}
+\label{sec:algo}
+In this section, we first describe our vector solid texture representation. Based on this model, we present our synthesis algorithm based on texture optimization framework.
+
+\subsection{Super-voxel Solid Texture}
+\label{subsec:avvt_repre}
+We are inspired by 2D image super-pixel segmentation. Taking the texture in Fig. \ref{fig:sp_lyr_exmp} as example, segmentation results are illustrated in Fig. \ref{fig:sp_lyr_1}-\ref{fig:sp_lyr_3} by conducting super-pixel segmentation on the texture with different target super-pixel size. When the super-pixels reduce to a certain small size, the super-pixel shape becomes regular and the mean-color image reveal similar appearance with the original exemplar.
+\begin{figure}[ht!]
+	\centering
+	\subfigure[]{\label{fig:sp_lyr_exmp}
+		\includegraphics[width=0.1\textwidth]{imgs/sp_exmp.jpg}
+	}
+	\subfigure[]{\label{fig:sp_lyr_1}
+		\includegraphics[width=0.1\textwidth]{imgs/sp_lyr_3.png}
+	}
+	\subfigure[]{\label{fig:sp_lyr_2}
+		\includegraphics[width=0.1\textwidth]{imgs/sp_lyr_4.png}
+	}
+	\subfigure[]{\label{fig:sp_lyr_3}
+		\includegraphics[width=0.1\textwidth]{imgs/sp_lyr_5.png}
+	}
+	\caption{Image super-pixel example. (a) Texture exemplar with size 200x200. (b-d) Super-pixel segmentation with patch mean color and average super-pixel size 200/120/80.}
+	\label{fig:superpixel_lyrs}
+\end{figure}
+
+We propose a vector solid texture representation for those textures which can be decomposed into homogeneous or smoothly varying regions. A solid texture consists in a set of super-voxel elements. Both region and color variation are defined by these elements. To represent region boundaries, each element consists a signed distance value. Interpolation is adopted to get the signed distance value for arbitrary pixel in volume. To represent color variation, each element has a radial basis function. Neighbor super-voxel colors are interpolated to evaluate pixel's color. A uniform grid is introduced in rendering to find neighbor super-voxels for efficient region determination and color evaluation. 
+\revision{Texture representation/Interpolation scheme.}
+
+\begin{figure*}[ht!]
+	\centering
+	\subfigure[]{\label{fig:manual_svvt_brick}
+		\includegraphics[width=0.3\textwidth]{imgs/manual_svvt_brick_comb.png}
+	}
+	\subfigure[]{\label{fig:manual_svvt_wood}
+		\includegraphics[width=0.3\textwidth]{imgs/manual_svvt_wood_comb.png}
+	}
+	\subfigure[]{\label{fig:manual_svvt_rand}
+		\includegraphics[width=0.3\textwidth]{imgs/manual_svvt_rand_comb.png}
+	}
+	\caption{Super-voxel solid textures with manually distributed super-voxels. (a) Brick solid texture. (b) Wood solid texture. (c) Random solid texture. Close-up views are at the right corners.}
+	\label{fig:manual_svvts}
+\end{figure*}
+
+Even the model itself can only represent textures with relatively smooth color variation, an independent high frequency noise can greatly improve the description power. Different from vector representation of \cite{wang2010vector,zhang2013efficient} which define signed distance field by regular grid, we distribute our regional representation to super-voxel elements. Even this would be infeasible to represent extremely sharp corners, it provides a more natural correspondence to image super-pixel segmentation.
+
+In Fig. \ref{fig:manual_svvts}, we demonstrate three super-voxel solid textures with manually distributed super-voxels. Each solid texture consists in 256 super-voxels and 4096 instances in volume. For one instance, we only need to store its position and super-voxel index. The model naturally provides region information, thus we can get clear boundaries and it's convenient to apply regional controlling or editing. As Fig. \ref{fig:manual_svvt_rand} demonstrates, the yellow part has a material with specular term while the dark part has only diffuse term.
+
+\revision{Extended representation for thin features.}
+
+\subsection{By-Example Super-voxel Solid Texture}
+This section describes our synthesis algorithm to generate vector solid texture from 2D example. Reviewing super-voxel solid texture model, we know that it's naturally  similar to image super-pixel segmentation. Each super-voxel element correlates to a super-pixel from 2D example. So the synthesis objective is to distribute super-voxel instances in volume and retain similar appearance to example. Inspired by discrete element texture \cite{ma2011discrete,ma2013dynamic}, we formulate the synthesis process by an optimization problem represented by Equation \ref{eq:syn_op_energy}.
+
+\begin{equation}\label{eq:syn_op_energy}
+E(\mathcal{O}_v;\mathcal{I}_i)=\sum_{\mathcal{SV}_o\in\mathcal{O}_v}^{}{\arrowvert n({\mathcal{SV}_o) - n(\mathcal{SP}_i)\arrowvert}^2}
+\end{equation}
+
+The energy term measures the distance between synthetic volume $\mathcal{O}_v$ and input image exemplar $\mathcal{I}_i$ by metric between super-voxel instance neighbor $n(\mathcal{SV}_o)$ in volume and super-pixel neighbor $n(\mathcal{SP}_i)$ in image. Both neighbor in image and volume are constructed by taking the union of all samples within a certain spatial extent. Since the distance between plane neighbor and volume neighbor can't be directly measured. We propose a scheme to construct three plane neighbor sets (on plane $XOY$, $XOZ$ and $YOZ$ respectively) from volume neighbor. The scheme is illustrated in Fig. \ref{fig:pln_neigh_constrc}. First, with a given set of neighbor sample for super-voxel sample  $\mathcal{SV}_o$ (as illustrated in Fig. \ref{fig:proj_vol_neigh}), we project each sample onto target plane (In Fig. \ref{fig:proj_pln_neigh}, we project neighbor samples onto plane $XOY$.) and reject those samples too close to the current super-voxel. In experiments, we take half of average neighbor distance as the rejection threshold. The sample number after this step is always much more than that of example super-pixel neighbor number. We finally apply a polar angle rejection to finish the construction. For consecutive neighbors with a small angle, the one with larger volume angle to the plane will be rejected (Example of final plane neighbor is illustrated in Fig \ref{fig:proj_final_pln_neigh}).
+
+\begin{figure}[ht!]
+	\centering
+	\subfigure[]{\label{fig:proj_vol_neigh}
+		\includegraphics[width=0.14\textwidth]{imgs/proj_vol_neigh.jpg}
+	}
+	\subfigure[]{\label{fig:proj_pln_neigh}
+		\includegraphics[width=0.14\textwidth]{imgs/proj_pln_neigh.jpg}
+	}
+	\subfigure[]{\label{fig:proj_final_pln_neigh}
+		\includegraphics[width=0.14\textwidth]{imgs/proj_final_pln_neigh.jpg}
+	}
+	\caption{Plane neighbor construction from volume neighbor. (a) Example volume neighbor. All green circles are neighbor samples of current super-voxel (colored in red). (b) Projected plane neighbor with distance selection. Green circles with black outlines are projected plane neighbors. The red dotted circle is the rejection circle. (c) Final plane neighbor after polar angle selection.}
+	\label{fig:pln_neigh_constrc}
+\end{figure}
+
+With constructed plane neighbor, we define neighbor distance metric by Equation \ref{eq:neigh_dist}.
+
+\begin{equation}\label{eq:neigh_dist}
+\begin{matrix}
+{\arrowvert n(\mathcal{SV}_o) - n(\mathcal{SP}_i) \arrowvert}^2 = \sum_{\mathcal{SV}_o' \in n(\mathcal{SV}_o)}^{} {\arrowvert \hat{p}(\mathcal{SV}_o') - \hat{p}(\mathcal{SP}_i') \arrowvert}^2  \\
+ +\alpha{\arrowvert c(\mathcal{SV}_o') - c(\mathcal{SP}_i') \arrowvert}^2+\beta{\arrowvert f(\mathcal{SV}_o') - f(\mathcal{SP}_i') \arrowvert}^2
+\end{matrix}
+\end{equation}
+
+The metric is defined as the sum of distance between matched projected super-voxel and example super pixel. We adopt the same matching scheme proposed by \cite{ma2011discrete} for discrete element texture. Only relative position between sample and neighbor is taken into consideration for neighbor matching. In each pairing step, the pair $(\mathcal{SV}_o',\mathcal{SP}_i')$ with minimum ${\arrowvert \hat{p}(\mathcal{SV}_o') - \hat{p}(\mathcal{SP}_i') \arrowvert}^2$ is identified and both of them will be excluded from further consideration. The distance between matched neighbor pair consists of three terms: ${\arrowvert \hat{p}(\mathcal{SV}_o') - \hat{p}(\mathcal{SP}_i') \arrowvert}^2$ for square difference between relative positions, ${\arrowvert c(\mathcal{SV}_o') - c(\mathcal{SP}_i') \arrowvert}^2$ for square difference between mean colors and ${\arrowvert f(\mathcal{SV}_o') - f(\mathcal{SP}_i') \arrowvert}^2$ for square difference between mean feature values. The feature represents the signed distance value of elements, as have been used in texture synthesis \cite{lefebvre2006appearance,kopf2007solid} and vector texture representation \cite{wang2010vector}. Different from the distance metric between discrete element neighbor \cite{ma2011discrete}, introducing feature distance term can help to retain similar appearance. $\alpha$ and $\beta$ are relative weights for color difference and feature difference.
+
+With the defined optimization energy function, we design our synthesis algorithm following the texture optimization methodology \cite{kwatra2005texture}. The complete synthesis procedure is described in Algorithm \ref{alg:svvt_syn}. It consists in four parts: example analysis, nearest neighbor search, candidate generation and super-voxel updating. The algorithm details is described by the following paragraphs.
+
+\begin{algorithm}[tb!]
+	\caption{Super-voxel Solid Texture Synthesis Algorithm}
+	\label{alg:svvt_syn}
+	\begin{algorithmic}[1]
+		\Require \Comment{$I_e$:Example RGB image};\Comment{$I_{m}$:Mask image};\Comment{$sz_{syn}$:synthesis size}
+		\Ensure Super-voxel solid texture $\mathcal{T}_{svs}$
+		\Function {SVSTSynthesis}{$I_e,I_{em},sz_{syn}$}
+		\State{$[\mathcal{SP}, \mathcal{N_{SP}}] \leftarrow Analyze(I_e,I_{em})$}
+		\State{$\mathcal{T}_{svs}.\mathcal{SV} \leftarrow \mathcal{SP}$}\Comment{Super-voxel set}
+		\State{$\mathcal{T}_{svs}.\mathcal{I_{SV}} \leftarrow Initialize(\mathcal{SP},sz_{syn})$}\Comment{Super-voxel instance set}
+		\While{Not converged and not enough iteration}
+		\State{$\mathcal{N}(\mathcal{T}_{svs}.\mathcal{I_{SV}}) \leftarrow Search(\mathcal{T}_{svs}.\mathcal{I_{SV}},\mathcal{SP},\mathcal{N_{SP}})$}
+		\State{$\mathcal{C}(\mathcal{T}_{svs}.\mathcal{I_{SV}}) \leftarrow GenCandidate(\mathcal{N}(\mathcal{T}_{svs}.\mathcal{I_{SV}}))$}
+		\State{$\mathcal{T}_{svs}.\mathcal{I_{SV}} \leftarrow Update(C(\mathcal{T}_{svs}.\mathcal{I_{SV}}))$}
+		\EndWhile
+		\State{\Return $\mathcal{T}_{svs}$}
+		\EndFunction
+		\State
+		\Function {Analyze}{$I_e,I_{em}$}
+		\State{$\mathcal{SP}\leftarrow SLIC(I_e,I_{em})$}
+		\State{$\mathcal{N_{SP}}\leftarrow SpatialNeighbor(\mathcal{SP})$}
+		\EndFunction
+		\State
+		\Function {Search}{$\mathcal{I_{SV}},\mathcal{SP},\mathcal{N_{SP}}$}
+		\For{$\mathcal{SV}\in \mathcal{I_{SV}}$}
+		\State{$n(\mathcal{SV})\leftarrow SpatialNeighbor(\mathcal{I_{SV}}, \mathcal{SV})$}
+		\State{$n(\mathcal{SP})\leftarrow NearestNeighbor(\mathcal{N_{SP}}, n(\mathcal{SV}))$}
+		\EndFor
+		\EndFunction
+		\State
+		\Function {GenCandidate}{$\mathcal{N}(\mathcal{I}_\mathcal{SV})$}
+		\For{$n(\mathcal{SP})\in \mathcal{N}(\mathcal{I}_\mathcal{SV})$}
+		\For{$SP \in n(\mathcal{SP})$}
+		\State{$\mathcal{C}(\mathcal{I_{SV}})\leftarrow Candidate(n(\mathcal{SP}), SP)$}
+		\EndFor
+		\EndFor
+		\EndFunction
+		\State
+		\Function{Update}{$\mathcal{C}(\mathcal{I_{SV}})$}
+		\For{$\mathcal{SV} \in \mathcal{C_{SV}}$}
+		\State{$SV.pos \leftarrow PositionPredict(\mathcal{C_{SV}})$}
+		\State{$SV.index \leftarrow SuperVoxelVote(\mathcal{C_{SV}})$}
+		\EndFor
+		\EndFunction
+	\end{algorithmic}
+\end{algorithm}
+
+\noindent
+\textbf{2D Example Analysis}
+As we have discussed in section \ref{subsec:avvt_repre}, our super-voxel solid texture can't directly represent high frequency details. In analysis, we separate example image into smoothed part and residual noise (Example illustrated in Fig. \ref{fig:exmp_smoothing}). L0 smoothing \cite{xu2011image} is conducted on input example because it can remove low-amplitude  structures and globally preserve and enhance salient edges. Super-pixel segmentation will be conducted on the smoothed example and the residual image will be analyzed for high frequency detail enhancement.
+\begin{figure}[t!]
+	\centering
+	\subfigure[]{\label{fig:smooth_exmp}
+		\includegraphics[width=0.14\textwidth]{imgs/smooth_exmp.png}
+	}
+	\subfigure[]{\label{fig:smooth_exmp_smoothed}
+		\includegraphics[width=0.14\textwidth]{imgs/smooth_exmp_smoothed.png}
+	}
+	\subfigure[]{\label{fig:smooth_exmp_noise}
+		\includegraphics[width=0.14\textwidth]{imgs/smooth_exmp_noise.png}
+	}
+	\subfigure[]{\label{fig:exmp_analy_sp_lyr}
+		\includegraphics[width=0.14\textwidth]{imgs/exmp_analy_sp_lyr.png}
+	}
+	\subfigure[]{\label{fig:exmp_analy_sp_ctrs}
+		\includegraphics[width=0.14\textwidth]{imgs/exmp_analy_sp_ctrs.png}
+	}
+	\subfigure[]{\label{fig:exmp_analy_render_tex}
+		\includegraphics[width=0.14\textwidth]{imgs/exmp_analy_render_tex.png}
+	}
+	\caption{Example image smoothing. (a) Texture exemplar with size 256x256. (b) Smoothed example. (c) Example residual noise. (d) Super-pixel segmentation with average 84 pixels. (e) Super-pixel centers. (f) Reconstructed example image from super-pixels.}
+	\label{fig:exmp_smoothing}
+\end{figure}
+
+\revision{Input mask image.}
+
+Even we have smoothed out high frequencies from example, there is still smooth variation in each region. Moreover, too big super-pixel can't produce similar super-voxel textures. We conduct super-pixel segmentation on the smoothed example (Example illustrated in Fig. \ref{fig:smooth_exmp_smoothed}) with SLIC algorithm \cite{achanta2012slic}. Example gray image and mask image are added together for segmentation. Our algorithm start segmentation from $8*8$ super-pixels. Average color difference are calculated after each segmentation. We double the target super-pixel number for finer segmentation until the average difference is lower than $0.05$ of the pixel color range. \revision{SLIC parameter}
+
+Then we compute super-pixel neighbor data. Each super-pixel will be simplified as a super-pixel element, consisting a center position, a mean color and mean signed distance value. As illustrated in Fig. \ref{fig:exmp_analy_sp_ctrs}, super-pixels with positive and negative signs are colored in red and blue respectively. Those boundary super-pixels in black won't be considered as candidates in synthesis. Super-pixels are connected to Voronoi neighbors. We calculate the average Voronoi neighbor distance $\overline{d}_v$ for further spatial extent neighbor calculation. Except for specific description, we use $1.5*\overline{d}_v$ as the threshold for example super-pixel neighbor computation and volumetric super-voxel neighbor computation. Besides, we also use $1.5*\overline{d}_v$ as the normalization factor for signed distance and color interpolation. A reconstructed example with this parameter is illustrated in Fig. \ref{fig:exmp_analy_render_tex}. \revision{Generate super-voxel set from example super-pixel set.}
+
+\noindent
+\textbf{Initialization}
+Since we generate 3d super-voxel samples from 2D example super-pixel, patch-based copy scheme used by \cite{ma2011discrete} can't be applied in our initialization step. Fortunately, super-pixel distribution in most examples have Poisson-like distribution. We start our synthesis from generating a 3D Poisson sample set. Each sample is randomly assigned with a super-voxel index.
+
+\noindent
+\textbf{Search Step} In search step, for each super-voxel instance, we first find all its neighbor in certain distance. Previously described 2D neighbor construction scheme is applied for the volume neighbor set. Then, the super-pixel with nearest neighbor is found for each projected 2D plane and the matching data is retained for further candidate set generation. K-coherence search \cite{tong2002synthesis} is adopted to accelerate the nearest neighbor searching step. In pre-process, we collect k super-pixels with nearest neighbor for each super-pixel in example image. In searching, the distance between the projection 2D neighbor and k-nearest neighbor of each neighbor sample is measured. The one with least distance is maintained.
+
+\noindent
+\textbf{Candidate Set Generation} 
+For each found example super-pixel with nearest neighbor, we first add the example super-pixel as candidate of the current super-voxel with the original position. Then, we add a candidate super-pixel for each neighbor super-pixel occupied in a matching pair. In Fig. \ref{fig:cand_generation}, the projected neighbor of super-voxel $SV_o$ (Illustrated by Fig. \ref{fig:cand_gen_output}) has a nearest example super-pixel neighbor (Illustrated by Fig. \ref{fig:cand_gen_input}). The neighbor Super-pixel $n_{vpi}$ is matched with the example super-pixel $n_{pi}$. $n_{vi}$ (In Fig. \ref{fig:cand_gen_pos}) is the corresponding super-voxel of $n_{vpi}$ before projection. So $n_{vi}$ has a candidate super-voxel with projected position as $n_{vpi}'$ (In Fig. \ref{fig:cand_gen_output}). The candidate super-pixel $n_{vi}'$ for $n_{vi}$ is assigned with a inverse-projected position with same spatial angle.
+\begin{figure}[h!]
+	\centering
+	\subfigure[]{\label{fig:cand_gen_output}
+		\includegraphics[height=0.14\textwidth]{imgs/cand_gen_output.jpg}
+	}
+	\subfigure[]{\label{fig:cand_gen_input}
+		\includegraphics[height=0.14\textwidth]{imgs/cand_gen_input.jpg}
+	}
+	\subfigure[]{\label{fig:cand_gen_pos}
+		\includegraphics[height=0.14\textwidth]{imgs/cand_gen_pos.jpg}
+	}
+	\caption{Super-voxel candidate position computation. (a) Projected neighbor for super-voxel $SV_o$. (b) Example super-pixel with nearest neighbor. (c) Candidate position inverse-projection.}
+	\label{fig:cand_generation}
+\end{figure}
+
+\noindent
+\textbf{Super-voxel Instance Update} Each super-voxel has a candidate super-voxel set. Each candidate correlates to a position and super-pixel index. Both the instance position and super-voxel index should be updated according to this candidate set.  
+\revision{Refine the updating process:Quadratic Function?}
+
+\revision{Iterative updating illustration.}
+\textbf{Comparison with/without feature}
+\textbf{Comparison with different SP size}
+\textbf{Comparison for updating schemes}
